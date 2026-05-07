@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔧 抽奖管理后台</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f5; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { text-align: center; color: #333; margin-bottom: 20px; }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .stats { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; }
+        .stat-item {
+            flex: 1; min-width: 100px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white; padding: 20px; border-radius: 12px; text-align: center;
+        }
+        .stat-item .num { font-size: 2em; font-weight: bold; }
+        .stat-item .lbl { font-size: 0.85em; opacity: 0.9; }
+        
+        .input-group { display: flex; gap: 10px; margin: 15px 0; }
+        .input-group input {
+            flex: 1; padding: 12px 15px; border: 2px solid #ddd;
+            border-radius: 10px; font-size: 1em;
+        }
+        .btn {
+            padding: 12px 25px; border: none; border-radius: 10px;
+            cursor: pointer; font-size: 1em; font-weight: bold;
+        }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        
+        .verify-result { padding: 15px; border-radius: 10px; margin-top: 10px; display: none; }
+        .verify-result.success { background: #d4edda; color: #155724; display: block; }
+        .verify-result.error { background: #f8d7da; color: #721c24; display: block; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.9em; }
+        th { background: #f8f9fa; padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; }
+        td { padding: 10px 12px; border-bottom: 1px solid #eee; }
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 15px; font-size: 0.8em; }
+        .badge-win { background: #fff3cd; color: #856404; }
+        .badge-lose { background: #f8f9fa; color: #6c757d; }
+        .badge-claimed { background: #d4edda; color: #155724; }
+        .badge-waiting { background: #cce5ff; color: #004085; font-weight: bold; }
+        
+        #loginBox { text-align: center; }
+        #mainContent { display: none; }
+        .logout { float: right; font-size: 0.85em; color: #666; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 抽奖管理后台 <span class="logout" onclick="logout()">退出登录</span></h1>
+        
+        <!-- 登录区域 -->
+        <div class="card" id="loginBox">
+            <h3>管理员登录</h3>
+            <div class="input-group" style="flex-direction:column;">
+                <input type="text" id="username" placeholder="用户名">
+                <input type="password" id="password" placeholder="密码">
+            </div>
+            <button class="btn btn-primary" onclick="login()" style="width:100%;">登 录</button>
+            <p style="color:#888;font-size:0.8em;margin-top:10px;">默认账号：admin / 123456</p>
+        </div>
+        
+        <!-- 主内容 -->
+        <div id="mainContent">
+            <!-- 核销区域 -->
+            <div class="card">
+                <h3>📱 核销兑换码</h3>
+                <div class="input-group">
+                    <input type="text" id="verifyCode" placeholder="输入6位兑换码" maxlength="6">
+                    <button class="btn btn-success" onclick="verifyCode()">核 销</button>
+                </div>
+                <div class="verify-result" id="verifyResult"></div>
+            </div>
+            
+            <!-- 统计 -->
+            <div class="card">
+                <h3>📊 活动统计</h3>
+                <div class="stats" id="statsArea"></div>
+            </div>
+            
+            <!-- 记录列表 -->
+            <div class="card">
+                <h3>📋 抽奖记录</h3>
+                <button class="btn btn-primary" onclick="loadRecords()">刷新记录</button>
+                <div id="recordsTable" style="overflow-x:auto;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 登录
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            const resp = await fetch('/api/admin/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username, password})
+            });
+            const data = await resp.json();
+            
+            if (data.success) {
+                document.getElementById('loginBox').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                loadRecords();
+            } else {
+                alert('登录失败：' + data.message);
+            }
+        }
+        
+        async function logout() {
+            await fetch('/api/admin/logout', {method: 'POST'});
+            location.reload();
+        }
+        
+        // 核销兑换码
+        async function verifyCode() {
+            const code = document.getElementById('verifyCode').value.trim();
+            if (!code) { alert('请输入兑换码'); return; }
+            
+            const resp = await fetch('/api/admin/verify-code', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({code})
+            });
+            const data = await resp.json();
+            
+            const resultDiv = document.getElementById('verifyResult');
+            resultDiv.className = 'verify-result ' + (data.success ? 'success' : 'error');
+            resultDiv.textContent = data.message;
+            
+            if (data.success) {
+                document.getElementById('verifyCode').value = '';
+                loadRecords(); // 刷新列表
+            }
+        }
+        
+        // 加载记录
+        async function loadRecords() {
+            const resp = await fetch('/api/admin/records');
+            const data = await resp.json();
+            
+            if (!data.success) {
+                alert('请先登录');
+                location.reload();
+                return;
+            }
+            
+            // 统计
+            const s = data.stats;
+            document.getElementById('statsArea').innerHTML = `
+                <div class="stat-item"><div class="num">${s.total_prizes}</div><div class="lbl">总奖品</div></div>
+                <div class="stat-item"><div class="num">${s.total_winners}</div><div class="lbl">已中奖</div></div>
+                <div class="stat-item"><div class="num">${s.remaining}</div><div class="lbl">剩余</div></div>
+                <div class="stat-item"><div class="num">${s.claimed_count}</div><div class="lbl">已核销</div></div>
+            `;
+            
+            // 表格
+            let html = '<table><tr><th>用户ID</th><th>结果</th><th>兑换码</th><th>抽奖时间</th><th>核销状态</th></tr>';
+            data.records.forEach(r => {
+                const resultBadge = r.is_winner 
+                    ? '<span class="badge badge-win">🎉 中奖</span>' 
+                    : '<span class="badge badge-lose">未中奖</span>';
+                
+                let claimBadge = '-';
+                if (r.is_winner) {
+                    claimBadge = r.claim_status 
+                        ? '<span class="badge badge-claimed">✅ 已领取 (' + r.claim_time + ')</span>'
+                        : '<span class="badge badge-waiting">⏳ 待领取</span>';
+                }
+                
+                html += `<tr>
+                    <td>${r.user_id.substring(0, 12)}...</td>
+                    <td>${resultBadge}</td>
+                    <td>${r.prize_code || '-'}</td>
+                    <td>${r.draw_time || '-'}</td>
+                    <td>${claimBadge}</td>
+                </tr>`;
+            });
+            html += '</table>';
+            document.getElementById('recordsTable').innerHTML = html;
+        }
+        
+        // 初始化：检查登录状态
+        (async function() {
+            const resp = await fetch('/api/admin/check-auth');
+            const data = await resp.json();
+            if (data.logged_in) {
+                document.getElementById('loginBox').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                loadRecords();
+            }
+        })();
+    </script>
+</body>
+</html>

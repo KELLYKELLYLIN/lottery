@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎉 抽奖活动</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px 30px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 { font-size: 2em; margin-bottom: 10px; color: #333; }
+        .subtitle { color: #888; margin-bottom: 30px; font-size: 0.9em; }
+        
+        .prize-box {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+        }
+        .prize-box .label { font-size: 0.9em; opacity: 0.9; }
+        .prize-box .count { font-size: 2.5em; font-weight: bold; margin: 5px 0; }
+        
+        .draw-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 18px 60px;
+            font-size: 1.3em;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+        .draw-btn:hover { transform: scale(1.05); box-shadow: 0 10px 30px rgba(102,126,234,0.4); }
+        .draw-btn:active { transform: scale(0.95); }
+        .draw-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .result {
+            margin-top: 25px;
+            padding: 20px;
+            border-radius: 15px;
+            display: none;
+        }
+        .result.show { display: block; }
+        .result.win {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+        }
+        .result.lose {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+        }
+        .result .icon { font-size: 3em; }
+        .result .msg { font-size: 1.2em; margin: 10px 0; color: #333; font-weight: bold; }
+        .result .code {
+            font-size: 2em;
+            letter-spacing: 5px;
+            color: #f5576c;
+            font-weight: bold;
+            margin: 10px 0;
+            background: white;
+            padding: 10px 20px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+        .result .code-label { font-size: 0.8em; color: #888; margin-top: 5px; }
+        
+        .claimed-badge {
+            display: inline-block;
+            background: #28a745;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            margin-top: 10px;
+        }
+        .unclaimed-badge {
+            display: inline-block;
+            background: #ffc107;
+            color: #333;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            margin-top: 10px;
+        }
+        
+        .countdown {
+            font-size: 1.5em;
+            color: #764ba2;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        
+        .loading { display: inline-block; width: 30px; height: 30px; border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎉 抽奖活动</h1>
+        <p class="subtitle">拼手速的时候到了！</p>
+        
+        <!-- 倒计时 -->
+        <div id="countdownArea" class="countdown" style="display:none;">
+            <p>距离活动开始还有</p>
+            <div id="countdownTimer">--:--:--</div>
+        </div>
+        
+        <!-- 奖品信息 -->
+        <div id="prizeArea" style="display:none;">
+            <div class="prize-box">
+                <div class="label">🎁 剩余奖品</div>
+                <div class="count" id="remainingCount">-</div>
+                <div class="label">份</div>
+            </div>
+            
+            <!-- 抽奖按钮 -->
+            <button class="draw-btn" id="drawBtn" onclick="doDraw()">
+                🎯 立即抽奖
+            </button>
+        </div>
+        
+        <!-- 结果展示 -->
+        <div class="result" id="resultArea">
+            <div class="icon" id="resultIcon"></div>
+            <div class="msg" id="resultMsg"></div>
+            <div id="codeArea" style="display:none;">
+                <div class="code" id="prizeCode"></div>
+                <div class="code-label">🏷️ 兑换码（请在现场出示）</div>
+                <div id="claimStatusArea"></div>
+            </div>
+        </div>
+        
+        <div id="loadingArea" style="display:none;">
+            <div class="loading"></div>
+            <p style="color:#888;margin-top:10px;">正在抽奖中...</p>
+        </div>
+    </div>
+
+    <script>
+        let hasDrawn = false;
+        
+        // 页面加载时检查状态
+        async function checkStatus() {
+            try {
+                const resp = await fetch('/api/check-status');
+                const data = await resp.json();
+                
+                if (!data.activity_active) {
+                    // 活动未开始，显示倒计时
+                    document.getElementById('countdownArea').style.display = 'block';
+                    startCountdown(data.start_time);
+                    return;
+                }
+                
+                // 活动已开始
+                document.getElementById('countdownArea').style.display = 'none';
+                document.getElementById('prizeArea').style.display = 'block';
+                document.getElementById('remainingCount').textContent = data.remaining;
+                
+                if (data.has_drawn) {
+                    // 已经抽过奖了
+                    hasDrawn = true;
+                    document.getElementById('drawBtn').disabled = true;
+                    document.getElementById('drawBtn').textContent = '已参与';
+                    showResult(data);
+                }
+            } catch (e) {
+                console.error('检查状态失败:', e);
+            }
+        }
+        
+        // 倒计时
+        function startCountdown(startTimeStr) {
+            const startTime = new Date(startTimeStr.replace(' ', 'T'));
+            
+            function updateCountdown() {
+                const now = new Date();
+                const diff = startTime - now;
+                
+                if (diff <= 0) {
+                    // 活动开始，刷新页面
+                    location.reload();
+                    return;
+                }
+                
+                const hours = Math.floor(diff / 3600000);
+                const minutes = Math.floor((diff % 3600000) / 60000);
+                const seconds = Math.floor((diff % 60000) / 1000);
+                document.getElementById('countdownTimer').textContent = 
+                    `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            }
+            
+            updateCountdown();
+            setInterval(updateCountdown, 1000);
+        }
+        
+        // 执行抽奖
+        async function doDraw() {
+            if (hasDrawn) return;
+            
+            document.getElementById('loadingArea').style.display = 'block';
+            document.getElementById('drawBtn').disabled = true;
+            
+            try {
+                const resp = await fetch('/api/draw', { method: 'POST' });
+                const data = await resp.json();
+                
+                document.getElementById('loadingArea').style.display = 'none';
+                hasDrawn = true;
+                document.getElementById('drawBtn').textContent = '已参与';
+                
+                showResult(data);
+                
+                // 更新剩余数量
+                if (data.is_winner || data.status === 'out_of_stock') {
+                    const remainingResp = await fetch('/api/check-status');
+                    const remainingData = await remainingResp.json();
+                    document.getElementById('remainingCount').textContent = remainingData.remaining;
+                }
+            } catch (e) {
+                document.getElementById('loadingArea').style.display = 'none';
+                document.getElementById('drawBtn').disabled = false;
+                alert('网络错误，请重试');
+            }
+        }
+        
+        // 显示结果
+        function showResult(data) {
+            const resultArea = document.getElementById('resultArea');
+            const resultIcon = document.getElementById('resultIcon');
+            const resultMsg = document.getElementById('resultMsg');
+            const codeArea = document.getElementById('codeArea');
+            
+            resultArea.className = 'result show';
+            
+            if (data.is_winner) {
+                resultArea.classList.add('win');
+                resultIcon.textContent = '🎉';
+                resultMsg.textContent = data.message || '恭喜您中奖了！';
+                
+                codeArea.style.display = 'block';
+                document.getElementById('prizeCode').textContent = data.prize_code;
+                
+                // 核销状态
+                const claimArea = document.getElementById('claimStatusArea');
+                if (data.claim_status === 1) {
+                    claimArea.innerHTML = '<span class="claimed-badge">✅ 已领取</span>';
+                } else {
+                    claimArea.innerHTML = '<span class="unclaimed-badge">📋 待领取（请到现场出示兑换码）</span>';
+                }
+            } else {
+                resultArea.classList.add('lose');
+                resultIcon.textContent = '😢';
+                resultMsg.textContent = data.message || '很遗憾，奖品已被抢完';
+                codeArea.style.display = 'none';
+            }
+        }
+        
+        // 初始化
+        checkStatus();
+    </script>
+</body>
+</html>
